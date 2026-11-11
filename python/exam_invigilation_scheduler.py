@@ -1692,6 +1692,12 @@ def main():
     sch = Scheduler(exams, teachers, meta=meta)
     result = sch.solve(iterations=args.iterations or ITERATIONS)
     print_schedule(result)
+    # 导出目录不存在时自动创建，避免产物回落到脚本所在目录
+    if args.outdir:
+        try:
+            os.makedirs(args.outdir, exist_ok=True)
+        except OSError as e:
+            print(f"⚠️ 无法创建导出目录 {args.outdir}：{e}")
     export_schedule(result, outdir=args.outdir)
     export_schedule_xlsx(result, outdir=args.outdir)
 
