@@ -47,6 +47,7 @@ func usage() {
           --no-self-seat       非本场考生留空（默认写「自习NNN」）
           --class-view         额外生成「名单(2)」按班级分组视图
           --added-color RRGGBB 新增/后补学生的标记色（默认 F8CBAD）
+          --strict-counts      严格按总控表名额排座，超出报错（默认：多出的人顺延进本场末考场）
           --make-score-template 按模板名单生成 总分表_待填.csv
 `)
 }
@@ -62,6 +63,7 @@ func runSeat(args []string) {
 	classView := fs.Bool("class-view", false, "生成名单(2)班级视图")
 	makeTpl := fs.Bool("make-score-template", false, "生成总分表填写模板")
 	addedColor := fs.String("added-color", seat.DefaultAddedRGB, "新增/后补学生标记色")
+	strictCounts := fs.Bool("strict-counts", false, "严格按总控表名额，超出报错")
 	_ = fs.Parse(args)
 
 	if *outdir != "" {
@@ -143,9 +145,10 @@ func runSeat(args []string) {
 
 	fmt.Println("编排中……")
 	res, err := seat.Arrange(students, roomSeats, arr, scoreMap, seat.Options{
-		SpecialRoom: *specialRoom,
-		AddedRGB:    strings.ToUpper(*addedColor),
-		Warn:        func(s string) { fmt.Println(s) },
+		SpecialRoom:  *specialRoom,
+		AddedRGB:     strings.ToUpper(*addedColor),
+		StrictCounts: *strictCounts,
+		Warn:         func(s string) { fmt.Println(s) },
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)

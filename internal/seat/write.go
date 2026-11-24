@@ -286,8 +286,22 @@ func moveSheetTo(f *excelize.File, name string, pos int) {
 // Verify 自检：各场考生/自习人数是否与总控表吻合、有无重复占座。
 func Verify(res *Arranged, arr *Arrangement) (string, bool) {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("【自检】\n  学生总数：%d\n", len(res.Ranked)))
-	exp := map[string][2]int{}
+	total := len(res.Ranked)
+	b.WriteString(fmt.Sprintf("【自检】\n  学生总数：%d\n", total))
+	// 期望人数以「名单实际选科」为准；顺延模式下总控表名额只是基准。
+	expected := func(subj string) [2]int {
+		if subj == "语数外" {
+			return [2]int{total, 0}
+		}
+		n := 0
+		for _, s := range res.Ranked {
+			if s.Takes(subj) {
+				n++
+			}
+		}
+		return [2]int{n, total - n}
+	}
+	base := map[string][2]int{}
 	for _, s := range arr.Sessions {
 		var t, sf int
 		for _, n := range s.Takers {
@@ -296,7 +310,7 @@ func Verify(res *Arranged, arr *Arrangement) (string, bool) {
 		for _, n := range s.Self {
 			sf += n
 		}
-		exp[s.Subject] = [2]int{t, sf}
+		base[s.Subject] = [2]int{t, sf}
 	}
 	ok := true
 	for _, plan := range res.Plans {
@@ -318,12 +332,18 @@ func Verify(res *Arranged, arr *Arrangement) (string, bool) {
 		if plan.Special {
 			key = "语数外"
 		}
+		exp := expected(key)
 		flag := "  ✓"
-		if e, found := exp[key]; found && [2]int{nExam, nSelf} != e {
-			flag = fmt.Sprintf("  ✗ 应为 考生%d/自习%d", e[0], e[1])
+		if exp != [2]int{nExam, nSelf} {
+			flag = fmt.Sprintf("  ✗ 应为 考生%d/自习%d", exp[0], exp[1])
 			ok = false
 		}
-		b.WriteString(fmt.Sprintf("  %-4s 考生 %3d / 自习 %3d%s\n", key, nExam, nSelf, flag))
+		diff := ""
+		if b0, found := base[key]; found && [2]int{nExam, nSelf} != b0 {
+			diff = fmt.Sprintf("  （总控表基准 %d/%d，顺延后 +%d/%d）",
+				b0[0], b0[1], nExam-b0[0], nSelf-b0[1])
+		}
+		b.WriteString(fmt.Sprintf("  %-4s 考生 %3d / 自习 %3d%s%s\n", key, nExam, nSelf, flag, diff))
 	}
 	for _, plan := range res.Plans {
 		seen := map[string]bool{}
@@ -335,6 +355,10 @@ func Verify(res *Arranged, arr *Arrangement) (string, bool) {
 				}
 				seen[s.SID] = true
 			}
+		}
+		if len(seen) != total {
+			b.WriteString(fmt.Sprintf("  ✗ 场次%s 只安排了 %d/%d 人\n", plan.Subject, len(seen), total))
+			ok = false
 		}
 	}
 	if ok {

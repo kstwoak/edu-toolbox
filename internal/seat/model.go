@@ -132,9 +132,10 @@ type Arrangement struct {
 
 // Options 编排参数。
 type Options struct {
-	SpecialRoom int    // 标黄学生语数外固定考场号
-	AddedRGB    string // 新增/后补学生的填充色
-	Warn        func(string)
+	SpecialRoom  int    // 标黄学生语数外固定考场号
+	AddedRGB     string // 新增/后补学生的填充色
+	StrictCounts bool   // true: 严格按总控表名额，超出报错；false: 多出的人顺延进本场末考场
+	Warn         func(string)
 }
 
 // Plan 一个场次的落座结果：考场号 → 座位序号 → 学生。

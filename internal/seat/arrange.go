@@ -102,21 +102,39 @@ func Arrange(students []*Student, roomSeats map[int][]int, arr *Arrangement, sco
 	fill := func(pool []*Student, counts map[int]int, subj string, skip ...int) map[int]map[int]*Student {
 		placed := map[int]map[int]*Student{}
 		idx := 0
-		var order []int
-		for rno := range counts {
-			order = append(order, rno)
-		}
-		sort.SliceStable(order, func(i, j int) bool {
-			return roomSeats[order[i]][0] < roomSeats[order[j]][0]
-		})
 		skipSet := map[int]bool{}
 		for _, s := range skip {
 			skipSet[s] = true
 		}
-		for _, rno := range order {
-			if skipSet[rno] {
-				continue
+		var order []int
+		for rno := range counts {
+			if !skipSet[rno] {
+				order = append(order, rno)
 			}
+		}
+		sort.SliceStable(order, func(i, j int) bool {
+			return roomSeats[order[i]][0] < roomSeats[order[j]][0]
+		})
+		counts = cloneIntMap(counts)
+		if len(order) > 0 {
+			capacity, n := 0, len(pool)
+			for _, rno := range order {
+				capacity += counts[rno]
+			}
+			if !opt.StrictCounts && n > capacity {
+				// 名单比总控表多：差额全部加到「本场座位号最大」的末考场
+				extra := n - capacity
+				last := order[len(order)-1]
+				before := counts[last]
+				counts[last] += extra
+				warn(fmt.Sprintf("  · 场次「%s」名单 %d 人 > 总控表 %d 人，多 %d 人顺延进末考场%d（名额 %d→%d）",
+					subj, n, capacity, extra, last, before, counts[last]))
+			} else if n < capacity {
+				warn(fmt.Sprintf("  · 场次「%s」名单 %d 人 < 总控表 %d 人，末考场%d 空出 %d 座",
+					subj, n, capacity, order[len(order)-1], capacity-n))
+			}
+		}
+		for _, rno := range order {
 			labels := append([]int(nil), roomSeats[rno]...)
 			cnt := counts[rno]
 			if cnt > len(labels) {
@@ -126,7 +144,7 @@ func Arrange(students []*Student, roomSeats map[int][]int, arr *Arrangement, sco
 					labels = append(labels, labels[len(labels)-1]+1)
 				}
 				roomSeats[rno] = labels
-				warn(fmt.Sprintf("  · 场次「%s」考场%d 需 %d 座（模板预印 %d 座），为本场末考场，座位号顺延至 %d",
+				warn(fmt.Sprintf("  · 场次「%s」考场%d 需 %d 座（模板预印 %d 座），座位号顺延至 %d",
 					subj, rno, cnt, pre, labels[len(labels)-1]))
 			}
 			for k := 0; k < cnt; k++ {
@@ -214,6 +232,14 @@ func Arrange(students []*Student, roomSeats map[int][]int, arr *Arrangement, sco
 		}
 	}
 	return &Arranged{Ranked: ranked, Plans: plans, RoomSeat: roomSeats}, nil
+}
+
+func cloneIntMap(m map[int]int) map[int]int {
+	out := make(map[int]int, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func mergeInto(dst, src map[int]map[int]*Student) {
