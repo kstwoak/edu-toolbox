@@ -41,14 +41,13 @@ func Arrange(students []*Student, roomSeats map[int][]int, arr *Arrangement, sco
 	// ── 排名 ──────────────────────────────
 	// 1. 有分且非新增：总分降序，同分保持名单顺序
 	// 2. 无分非新增：#N/A 一组、其它（缺考等）一组，各保持名单顺序
-	// 3. 新增（高亮）：排最后，有分者降序，无分者保持名单顺序
-	var gScored, gNA, gOther, gAddScored, gAddNone []*Student
+	// 3. F8CBAD（后补生）：抱团成块；名单有排名按排名定位，否则按分数定位
+	//    始终抱团在同一考场，落位随分数自适应（分数低→末考场，补分后→靠后匹配考场）。
+	var gScored, gNA, gOther, gAdd []*Student
 	for _, s := range students {
 		switch {
-		case s.Added && s.HasScore:
-			gAddScored = append(gAddScored, s)
 		case s.Added:
-			gAddNone = append(gAddNone, s)
+			gAdd = append(gAdd, s)
 		case s.HasScore:
 			gScored = append(gScored, s)
 		case isNA(s):
@@ -58,14 +57,53 @@ func Arrange(students []*Student, roomSeats map[int][]int, arr *Arrangement, sco
 		}
 	}
 	sort.SliceStable(gScored, func(i, j int) bool { return gScored[i].Score > gScored[j].Score })
-	sort.SliceStable(gAddScored, func(i, j int) bool { return gAddScored[i].Score > gAddScored[j].Score })
+	// 新增块：有分者降序在前，无分者按名单顺序在后
+	sort.SliceStable(gAdd, func(i, j int) bool {
+		if gAdd[i].HasScore != gAdd[j].HasScore {
+			return gAdd[i].HasScore
+		}
+		if gAdd[i].HasScore && gAdd[j].HasScore && gAdd[i].Score != gAdd[j].Score {
+			return gAdd[i].Score > gAdd[j].Score
+		}
+		return false
+	})
+
+	normal := make([]*Student, 0, len(students))
+	normal = append(normal, gScored...)
+	normal = append(normal, gNA...)
+	normal = append(normal, gOther...)
+
+	// 插入点：
+	//   名单自带排名 → 按 added 块最小排名定位（复现教务实际结果）
+	//   空白模板无排名 → 置底（最靠后，后补生不插到中间）
+	insertAt := len(normal)
+	if len(gAdd) > 0 {
+		allHaveRank := true
+		minRank := 0
+		for i, s := range gAdd {
+			if s.ListRank <= 0 {
+				allHaveRank = false
+				break
+			}
+			if i == 0 || s.ListRank < minRank {
+				minRank = s.ListRank
+			}
+		}
+		if allHaveRank {
+			insertAt = 0
+			for _, s := range normal {
+				if s.ListRank > 0 && s.ListRank < minRank {
+					insertAt++
+				}
+			}
+		}
+		// 无排名时 insertAt 保持 len(normal) → 置底
+	}
 
 	ranked := make([]*Student, 0, len(students))
-	ranked = append(ranked, gScored...)
-	ranked = append(ranked, gNA...)
-	ranked = append(ranked, gOther...)
-	ranked = append(ranked, gAddScored...)
-	ranked = append(ranked, gAddNone...)
+	ranked = append(ranked, normal[:insertAt]...)
+	ranked = append(ranked, gAdd...)
+	ranked = append(ranked, normal[insertAt:]...)
 	for i, s := range ranked {
 		s.Rank = i + 1
 	}
@@ -86,7 +124,7 @@ func Arrange(students []*Student, roomSeats map[int][]int, arr *Arrangement, sco
 		}
 	}
 	if nAdded > 0 {
-		warn(fmt.Sprintf("  · 名单高亮 %d 人（新增/后补）→ 排在最后", nAdded))
+		warn(fmt.Sprintf("  · 名单高亮 %d 人（后补生）→ 抱团成块，按排名/分数定位靠后考场", nAdded))
 	}
 	nSpecial := 0
 	for _, s := range ranked {

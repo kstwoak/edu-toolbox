@@ -6,8 +6,9 @@
 // 分配规则（与教务参考结果逐格比对一致）：
 //   - 每场按总分降序重排，按「首座座位号升序」依次填座（全局连续座位号）
 //   - 不考该科的学生按同样规则填入本场自习考场，座位号写「自习NNN」
-//   - 名单姓名列标黄 → 语数外固定进特殊考场（默认第 12 考场 304）
-//   - 选科列标为主题色5 → 新增/后补学生，排名置最后
+//   - 姓名列标黄 → 语数外固定进特殊考场（默认第 12 考场 304）
+//   - 选科列主题色5（F8CBAD）→ 后补生，抱团成连续块、落位靠后：
+//     名单自带排名时按排名定位（复现教务），空白模板无排名时按分数定位
 //   - 某考场人数超出模板预印座位数 → 座位号顺延（末考场扩容）
 //   - 总分缺失（缺考 / #N/A / 空）排最后，按名单原始顺序
 package seat
@@ -92,6 +93,7 @@ type Student struct {
 	HasScore bool
 	ScoreRaw string
 	Rank     int
+	ListRank int  // 名单自带的排名列（0=无）；有值时 added 块按此定位
 	Special  bool // 姓名列标黄
 	Added    bool // 选科列主题色5
 	Subjects map[string]bool
@@ -173,6 +175,11 @@ func ReadStudents(f *excelize.File, addedRGB string) ([]*Student, error) {
 		}
 		s.Special = xlsxutil.FillRGB(f, "名单", xlsxutil.CellName(r, nmName)) == YellowRGB
 		s.Added = xlsxutil.FillRGB(f, "名单", xlsxutil.CellName(r, nmChoice)) == addedRGB
+		if lr := xlsxutil.At(rows, r, nmRank); lr != "" {
+			if v, err := strconv.ParseFloat(lr, 64); err == nil {
+				s.ListRank = int(v)
+			}
+		}
 		out = append(out, s)
 	}
 	return out, nil
